@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block titulo %}{{ incidencia.titulo }}{% endblock %}
+
+{% block contenido %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Incidencia #{{ incidencia.id }}</span>
+                <span class="badge bg-{{ incidencia.estado_badge }}">{{ incidencia.get_estado_display }}</span>
+            </div>
+            <div class="card-body">
+                <h3 class="card-title">{{ incidencia.titulo }}</h3>
+                <p class="text-muted small mb-3">
+                    Reportada por <strong>{{ incidencia.residente.username }}</strong>
+                    {% if incidencia.residente.perfil.edificio %}
+                        · {{ incidencia.residente.perfil.edificio }}
+                        {% if incidencia.residente.perfil.piso_puerta %}({{ incidencia.residente.perfil.piso_puerta }}){% endif %}
+                    {% endif %}
+                    · {{ incidencia.creada|date:"d/m/Y H:i" }}
+                </p>
+                <p>
+                    <span class="badge bg-secondary">{{ incidencia.get_categoria_display }}</span>
+                    <span class="badge bg-{{ incidencia.prioridad_badge }}">Prioridad {{ incidencia.get_prioridad_display }}</span>
+                </p>
+                <p style="white-space: pre-line;">{{ incidencia.descripcion }}</p>
+
+                {% if incidencia.foto %}
+                <img src="{{ incidencia.foto.url }}" alt="Foto de la incidencia" class="img-fluid rounded mb-3" style="max-height: 400px;">
+                {% endif %}
+
+                {% if incidencia.tecnico %}
+                <p class="mb-0"><strong>Técnico asignado:</strong> {{ incidencia.tecnico }}</p>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <a class="btn btn-secondary" href="{% url 'incidencia_lista' %}">Volver</a>
+                {% if puede_editar %}
+                <a class="btn btn-info" href="{% url 'incidencia_editar' incidencia.pk %}">Editar</a>
+                {% endif %}
+                {% if es_admin %}
+                <a class="btn btn-primary" href="{% url 'incidencia_gestionar' incidencia.pk %}">Gestionar</a>
+                {% endif %}
+                {% if puede_eliminar %}
+                <a class="btn btn-danger" href="{% url 'incidencia_eliminar' incidencia.pk %}">Eliminar</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if es_admin and incidencia.notas_internas %}
+        <div class="card border-warning shadow-sm mb-4">
+            <div class="card-header bg-warning-subtle">Notas internas (solo administrador)</div>
+            <div class="card-body" style="white-space: pre-line;">{{ incidencia.notas_internas }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header">Historial y comentarios</div>
+            <div class="card-body">
+                {% for c in comentarios %}
+                <div class="mb-3 border-bottom pb-2">
+                    <div class="small text-muted">
+                        <strong>{{ c.autor.username }}</strong> · {{ c.creado|date:"d/m/Y H:i" }}
+                    </div>
+                    <div style="white-space: pre-line;">{{ c.texto }}</div>
+                </div>
+                {% empty %}
+                <p class="text-muted">Aún no hay comentarios.</p>
+                {% endfor %}
+
+                <form method="post" action="{% url 'incidencia_comentar' incidencia.pk %}">
+                    {% csrf_token %}
+                    {% include "includes/campos_form.html" with form=comentario_form %}
+                    <button type="submit" class="btn btn-primary btn-sm">Enviar comentario</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

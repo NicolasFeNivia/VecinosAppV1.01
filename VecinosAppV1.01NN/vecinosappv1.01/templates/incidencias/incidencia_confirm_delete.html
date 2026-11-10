@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block titulo %}Eliminar incidencia{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card border-danger shadow-sm">
+            <div class="card-header bg-danger text-white">Confirmar eliminación</div>
+            <div class="card-body">
+                <p>¿Seguro que quieres eliminar la incidencia <strong>"{{ object.titulo }}"</strong>? Esta acción no se puede deshacer.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+                    <a class="btn btn-secondary" href="{% url 'incidencia_detalle' object.pk %}">No, volver</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
