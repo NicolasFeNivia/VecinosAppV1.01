@@ -17,6 +17,8 @@ from django.views.generic import (
 )
 
 from . import dominio, services
+from .busqueda import buscar_incidencias
+from .autorizacion import puede_realizar
 from .forms import (
     ComentarioForm,
     IncidenciaForm,
@@ -31,8 +33,16 @@ from .models import Incidencia, Perfil
 def incidencias_visibles(user):
     """El administrador ve todas; el residente solo las suyas."""
     qs = Incidencia.objects.select_related('residente')
-    if es_admin(user):
+    from .tenant import edificio_actual
+    edificio_id = edificio_actual()
+    if edificio_id is not None:
+        qs = qs.filter(edificio_id=edificio_id)
+    elif es_admin(user) or user.groups.filter(name__in=['Auditor', 'Técnico']).exists():
+        return qs.none()
+    if es_admin(user) or user.groups.filter(name='Auditor').exists():
         return qs
+    if user.groups.filter(name='Técnico').exists():
+        return qs.filter(tecnico__usuario=user, tecnico__activo=True)
     return qs.filter(residente=user)
 
 
@@ -81,12 +91,12 @@ class IncidenciaListView(LoginRequiredMixin, ListView):
     paginate_by = 10  # Bonus: paginación
 
     def get_queryset(self):
-        qs = incidencias_visibles(self.request.user)
+        qs = incidencias_visibles(self.request.user).select_related('edificio', 'tecnico', 'residente')
         g = self.request.GET
 
         q = g.get('q', '').strip()
         if q:
-            qs = qs.filter(Q(titulo__icontains=q) | Q(descripcion__icontains=q))
+            qs = buscar_incidencias(qs, q)
         if g.get('categoria'):
             qs = qs.filter(categoria=g['categoria'])
         if g.get('estado'):
@@ -121,8 +131,8 @@ class IncidenciaDetailView(LoginRequiredMixin, DetailView):
         usuario = self.request.user
         ctx['comentarios'] = incidencia.comentarios.select_related('autor')
         ctx['comentario_form'] = ComentarioForm()
-        ctx['puede_editar'] = incidencia.residente == usuario and incidencia.estado == 'pendiente'
-        ctx['puede_eliminar'] = es_admin(usuario) or incidencia.residente == usuario
+        ctx['puede_editar'] = puede_realizar(usuario, 'editar', incidencia)
+        ctx['puede_eliminar'] = puede_realizar(usuario, 'eliminar', incidencia)
         ctx['eventos'] = incidencia.eventos.select_related('actor')
         ctx['puede_reabrir'] = dominio.puede_reabrir(incidencia.estado)
         return ctx
@@ -154,9 +164,12 @@ class IncidenciaUpdateView(
     model = Incidencia
     form_class = IncidenciaForm
 
+    def get_queryset(self):
+        return incidencias_visibles(self.request.user)
+
     def test_func(self):
         incidencia = self.get_object()
-        return incidencia.residente == self.request.user and incidencia.estado == 'pendiente'
+        return puede_realizar(self.request.user, 'editar', incidencia)
 
     def form_valid(self, form):
         messages.success(self.request, 'Incidencia actualizada.')
@@ -172,7 +185,8 @@ class IncidenciaGestionView(LoginRequiredMixin, AdminRequiredMixin, FormView):
     @cached_property
     def incidencia(self):
         return get_object_or_404(
-            Incidencia.objects.select_related('edificio', 'tecnico'), pk=self.kwargs['pk']
+            incidencias_visibles(self.request.user).select_related('edificio', 'tecnico'),
+            pk=self.kwargs['pk']
         )
 
     def get_form_kwargs(self):
@@ -199,7 +213,7 @@ class IncidenciaReabrirView(LoginRequiredMixin, AdminRequiredMixin, View):
     http_method_names = ['post']
 
     def post(self, request, pk):
-        incidencia = get_object_or_404(Incidencia, pk=pk)
+        incidencia = get_object_or_404(incidencias_visibles(request.user), pk=pk)
         try:
             services.reabrir(incidencia, actor=request.user, motivo=request.POST.get('motivo', ''))
             messages.success(request, 'Incidencia reabierta.')
@@ -216,9 +230,12 @@ class IncidenciaDeleteView(
     model = Incidencia
     success_url = reverse_lazy('incidencia_lista')
 
+    def get_queryset(self):
+        return incidencias_visibles(self.request.user)
+
     def test_func(self):
         incidencia = self.get_object()
-        return es_admin(self.request.user) or incidencia.residente == self.request.user
+        return puede_realizar(self.request.user, 'eliminar', incidencia)
 
     def form_valid(self, form):
         messages.success(self.request, 'Incidencia eliminada.')
@@ -234,6 +251,8 @@ class ComentarioCreateView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
         incidencia = get_object_or_404(incidencias_visibles(request.user), pk=pk)
+        if not puede_realizar(request.user, 'comentar', incidencia):
+            return redirect('incidencia_lista')
         form = ComentarioForm(request.POST)
         if form.is_valid():
             comentario = form.save(commit=False)
@@ -254,13 +273,14 @@ class DashboardView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
+        base = incidencias_visibles(self.request.user)
         por_categoria = {
             f['categoria']: f['total']
-            for f in Incidencia.objects.order_by().values('categoria').annotate(total=Count('id'))
+            for f in base.order_by().values('categoria').annotate(total=Count('id'))
         }
         por_estado = {
             f['estado']: f['total']
-            for f in Incidencia.objects.order_by().values('estado').annotate(total=Count('id'))
+            for f in base.order_by().values('estado').annotate(total=Count('id'))
         }
 
         ctx['datos_categoria'] = {
@@ -271,7 +291,7 @@ class DashboardView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
             'labels': [etiqueta for _, etiqueta in Incidencia.ESTADOS],
             'values': [por_estado.get(valor, 0) for valor, _ in Incidencia.ESTADOS],
         }
-        ctx['total'] = Incidencia.objects.count()
+        ctx['total'] = base.count()
         ctx['resumen_estados'] = [
             (etiqueta, por_estado.get(valor, 0)) for valor, etiqueta in Incidencia.ESTADOS
         ]

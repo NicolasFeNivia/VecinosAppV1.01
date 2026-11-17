@@ -6,7 +6,7 @@ def crear_grupos(sender, **kwargs):
     """Crea los grupos de roles después de aplicar las migraciones."""
     from django.contrib.auth.models import Group
 
-    for nombre in ('Residente', 'Administrador'):
+    for nombre in ('Residente', 'Administrador', 'Técnico', 'Auditor'):
         Group.objects.get_or_create(name=nombre)
 
 

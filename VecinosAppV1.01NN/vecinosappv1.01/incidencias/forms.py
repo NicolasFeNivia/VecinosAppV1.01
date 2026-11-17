@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import UploadedFile
+from PIL import Image, UnidentifiedImageError
 
 from . import dominio
 from .models import Comentario, Edificio, Incidencia, Perfil, Tecnico
@@ -61,7 +62,7 @@ class RegistroForm(BootstrapMixin, UserCreationForm):
 class PerfilForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = Perfil
-        fields = ['nombre_completo', 'piso_puerta', 'edificio']
+        fields = ['nombre_completo', 'piso_puerta']
 
 
 class IncidenciaForm(BootstrapMixin, forms.ModelForm):
@@ -83,8 +84,18 @@ class IncidenciaForm(BootstrapMixin, forms.ModelForm):
     def clean_foto(self):
         foto = self.cleaned_data.get('foto')
         # Solo se valida cuando se está subiendo un archivo nuevo
-        if isinstance(foto, UploadedFile) and foto.size > MAX_FOTO_MB * 1024 * 1024:
-            raise forms.ValidationError(f'La foto no puede pesar más de {MAX_FOTO_MB} MB.')
+        if isinstance(foto, UploadedFile):
+            if foto.size > MAX_FOTO_MB * 1024 * 1024:
+                raise forms.ValidationError(f'La foto no puede pesar más de {MAX_FOTO_MB} MB.')
+            try:
+                foto.seek(0)
+                imagen = Image.open(foto)
+                if imagen.format not in {'JPEG', 'PNG', 'WEBP'}:
+                    raise forms.ValidationError('Formato no permitido. Usa JPG, PNG o WEBP.')
+                imagen.verify()
+                foto.seek(0)
+            except (UnidentifiedImageError, OSError, ValueError):
+                raise forms.ValidationError('El archivo no contiene una imagen válida.')
         return foto
 
 

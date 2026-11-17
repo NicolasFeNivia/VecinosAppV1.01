@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (
-    Comentario, Edificio, EventoIncidencia, Incidencia, Organizacion, Perfil, Tecnico, Unidad,
+    AuditoriaAcceso, Comentario, Edificio, EventoIncidencia, Incidencia, Organizacion, Perfil, Tecnico, Unidad,
 )
 
 
@@ -46,7 +46,7 @@ class EdificioAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'organizacion', 'direccion')
     list_filter = ('organizacion',)
     search_fields = ('nombre',)
-    filter_horizontal = ('administradores',)
+    filter_horizontal = ('administradores', 'auditores')
 
 
 @admin.register(Unidad)
@@ -66,6 +66,23 @@ class TecnicoAdmin(admin.ModelAdmin):
 class EventoIncidenciaAdmin(admin.ModelAdmin):
     list_display = ('incidencia', 'tipo', 'estado_anterior', 'estado_nuevo', 'actor', 'creado')
     list_filter = ('tipo',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AuditoriaAcceso)
+class AuditoriaAccesoAdmin(admin.ModelAdmin):
+    list_display = ('usuario', 'edificio', 'metodo', 'ruta', 'resultado', 'creado')
+    list_filter = ('metodo', 'resultado', 'edificio')
+    search_fields = ('ruta', 'usuario__username')
+    readonly_fields = ('usuario', 'edificio', 'ruta', 'metodo', 'resultado', 'direccion_ip', 'creado')
 
     def has_add_permission(self, request):
         return False

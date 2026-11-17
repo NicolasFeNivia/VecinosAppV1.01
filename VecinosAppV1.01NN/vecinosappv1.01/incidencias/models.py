@@ -23,6 +23,9 @@ class Edificio(models.Model):
     administradores = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True, related_name='edificios_administrados'
     )
+    auditores = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='edificios_auditados'
+    )
 
     class Meta:
         constraints = [
@@ -141,6 +144,17 @@ class Incidencia(models.Model):
         ordering = ['-creada']
         verbose_name = 'incidencia'
         verbose_name_plural = 'incidencias'
+        indexes = [
+            models.Index(fields=['edificio', 'estado', '-creada'], name='inc_edif_estado_fecha'),
+            models.Index(fields=['edificio', 'prioridad', 'estado'], name='inc_edif_prio_estado'),
+            models.Index(fields=['tecnico', 'estado', '-creada'], name='inc_tecnico_estado_fecha'),
+            models.Index(fields=['-creada'], name='inc_fecha_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=~models.Q(titulo=''), name='inc_titulo_no_vacio'),
+            models.CheckConstraint(condition=models.Q(prioridad__in=['baja', 'media', 'alta']), name='inc_prioridad_valida'),
+            models.CheckConstraint(condition=models.Q(estado__in=['pendiente', 'en_proceso', 'resuelta', 'cerrada']), name='inc_estado_valido'),
+        ]
 
     def __str__(self):
         return self.titulo
@@ -242,3 +256,21 @@ class EventoIncidencia(models.Model):
 
     def delete(self, *args, **kwargs):
         raise EventoInmutableError('Los eventos son inmutables: no se pueden borrar.')
+
+
+class AuditoriaAcceso(models.Model):
+    """Registro de accesos a recursos del sistema para trazabilidad M2."""
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    edificio = models.ForeignKey(Edificio, on_delete=models.SET_NULL, null=True, blank=True)
+    ruta = models.CharField(max_length=500)
+    metodo = models.CharField(max_length=10)
+    resultado = models.PositiveSmallIntegerField(default=200)
+    direccion_ip = models.GenericIPAddressField(null=True, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-creado']
+        indexes = [models.Index(fields=['edificio', '-creado'], name='audit_edif_fecha_idx')]
+
+    def __str__(self):
+        return f'{self.usuario_id} {self.metodo} {self.ruta}'
