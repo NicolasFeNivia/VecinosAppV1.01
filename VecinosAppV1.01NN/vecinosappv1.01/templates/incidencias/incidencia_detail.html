@@ -45,6 +45,13 @@
                 {% if puede_eliminar %}
                 <a class="btn btn-danger" href="{% url 'incidencia_eliminar' incidencia.pk %}">Eliminar</a>
                 {% endif %}
+                {% if es_admin and puede_reabrir %}
+                <form method="post" action="{% url 'incidencia_reabrir' incidencia.pk %}" class="d-flex gap-2 mt-3">
+                    {% csrf_token %}
+                    <input type="text" name="motivo" class="form-control" placeholder="Motivo de la reapertura" required>
+                    <button type="submit" class="btn btn-warning">Reabrir</button>
+                </form>
+                {% endif %}
             </div>
         </div>
 
@@ -57,8 +64,22 @@
     </div>
 
     <div class="col-lg-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">Historial de la incidencia</div>
+            <ul class="list-group list-group-flush">
+                {% for e in eventos %}
+                <li class="list-group-item small">
+                    <strong>{{ e.get_tipo_display }}</strong>
+                    {% if e.estado_nuevo %}→ {{ e.estado_nuevo }}{% endif %}
+                    {% if e.detalle %}<br>{{ e.detalle }}{% endif %}
+                    <br><span class="text-muted">{{ e.actor.username|default:"sistema" }} · {{ e.creado|date:"d/m/Y H:i" }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
         <div class="card shadow-sm">
-            <div class="card-header">Historial y comentarios</div>
+            <div class="card-header">Comentarios</div>
             <div class="card-body">
                 {% for c in comentarios %}
                 <div class="mb-3 border-bottom pb-2">

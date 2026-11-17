@@ -4,16 +4,19 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils.dateparse import parse_date
+from django.utils.functional import cached_property
 from django.views import View
 from django.views.generic import (
     CreateView,
     DeleteView,
     DetailView,
+    FormView,
     ListView,
     TemplateView,
     UpdateView,
 )
 
+from . import dominio, services
 from .forms import (
     ComentarioForm,
     IncidenciaForm,
@@ -120,6 +123,8 @@ class IncidenciaDetailView(LoginRequiredMixin, DetailView):
         ctx['comentario_form'] = ComentarioForm()
         ctx['puede_editar'] = incidencia.residente == usuario and incidencia.estado == 'pendiente'
         ctx['puede_eliminar'] = es_admin(usuario) or incidencia.residente == usuario
+        ctx['eventos'] = incidencia.eventos.select_related('actor')
+        ctx['puede_reabrir'] = dominio.puede_reabrir(incidencia.estado)
         return ctx
 
 
@@ -128,9 +133,17 @@ class IncidenciaCreateView(LoginRequiredMixin, CreateView):
     form_class = IncidenciaForm
 
     def form_valid(self, form):
-        form.instance.residente = self.request.user
+        perfil = getattr(self.request.user, 'perfil', None)
+        if perfil is None or perfil.edificio is None:
+            messages.error(self.request, 'Primero elige tu edificio en tu perfil.')
+            return redirect('perfil')
+        self.object = services.crear_incidencia(
+            residente=self.request.user,
+            edificio=perfil.edificio,
+            **form.cleaned_data,
+        )
         messages.success(self.request, 'Incidencia reportada correctamente.')
-        return super().form_valid(form)
+        return redirect(self.get_success_url())
 
 
 class IncidenciaUpdateView(
@@ -150,19 +163,49 @@ class IncidenciaUpdateView(
         return super().form_valid(form)
 
 
-class IncidenciaGestionView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
-    """Solo el administrador: cambia estado, prioridad, técnico y notas internas."""
+class IncidenciaGestionView(LoginRequiredMixin, AdminRequiredMixin, FormView):
+    """Solo el administrador. Todo cambio pasa por el caso de uso `gestionar`."""
 
-    model = Incidencia
     form_class = IncidenciaGestionForm
     template_name = 'incidencias/incidencia_gestion.html'
 
-    def get_success_url(self):
-        return reverse('incidencia_detalle', args=[self.object.pk])
+    @cached_property
+    def incidencia(self):
+        return get_object_or_404(
+            Incidencia.objects.select_related('edificio', 'tecnico'), pk=self.kwargs['pk']
+        )
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['incidencia'] = self.incidencia
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['object'] = self.incidencia
+        return ctx
 
     def form_valid(self, form):
+        try:
+            services.gestionar(self.incidencia, actor=self.request.user, **form.cleaned_data)
+        except dominio.DominioError as error:
+            form.add_error(None, str(error))
+            return self.form_invalid(form)
         messages.success(self.request, 'Incidencia gestionada correctamente.')
-        return super().form_valid(form)
+        return redirect('incidencia_detalle', pk=self.incidencia.pk)
+
+
+class IncidenciaReabrirView(LoginRequiredMixin, AdminRequiredMixin, View):
+    http_method_names = ['post']
+
+    def post(self, request, pk):
+        incidencia = get_object_or_404(Incidencia, pk=pk)
+        try:
+            services.reabrir(incidencia, actor=request.user, motivo=request.POST.get('motivo', ''))
+            messages.success(request, 'Incidencia reabierta.')
+        except dominio.DominioError as error:
+            messages.error(request, str(error))
+        return redirect('incidencia_detalle', pk=pk)
 
 
 class IncidenciaDeleteView(

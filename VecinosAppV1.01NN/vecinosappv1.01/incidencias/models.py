@@ -3,13 +3,85 @@ from django.db import models
 from django.urls import reverse
 
 
+class Organizacion(models.Model):
+    nombre = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        verbose_name = 'organización'
+        verbose_name_plural = 'organizaciones'
+
+    def __str__(self):
+        return self.nombre
+
+
+class Edificio(models.Model):
+    organizacion = models.ForeignKey(
+        Organizacion, on_delete=models.PROTECT, related_name='edificios'
+    )
+    nombre = models.CharField(max_length=100)
+    direccion = models.CharField(max_length=200, blank=True)
+    administradores = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='edificios_administrados'
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organizacion', 'nombre'], name='edificio_unico_por_organizacion'
+            )
+        ]
+
+    def __str__(self):
+        return self.nombre
+
+
+class Unidad(models.Model):
+    edificio = models.ForeignKey(Edificio, on_delete=models.CASCADE, related_name='unidades')
+    identificador = models.CharField(max_length=20)
+
+    class Meta:
+        verbose_name = 'unidad'
+        verbose_name_plural = 'unidades'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['edificio', 'identificador'], name='unidad_unica_por_edificio'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.edificio} - {self.identificador}'
+
+
+class Tecnico(models.Model):
+    nombre = models.CharField(max_length=100)
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tecnico',
+    )
+    edificios = models.ManyToManyField(Edificio, blank=True, related_name='tecnicos')
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.nombre
+
+
 class Perfil(models.Model):
     usuario = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='perfil'
     )
     nombre_completo = models.CharField('Nombre completo', max_length=100, blank=True)
     piso_puerta = models.CharField('Piso / puerta', max_length=20, blank=True)
-    edificio = models.CharField('Edificio', max_length=100, blank=True)
+    edificio = models.ForeignKey(
+        Edificio,
+        verbose_name='Edificio',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='residentes',
+    )
 
     class Meta:
         verbose_name_plural = 'perfiles'
@@ -47,7 +119,20 @@ class Incidencia(models.Model):
     residente = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='incidencias'
     )
-    tecnico = models.CharField('Técnico asignado', max_length=100, blank=True)
+    edificio = models.ForeignKey(
+        Edificio, on_delete=models.PROTECT, related_name='incidencias'
+    )
+    unidad = models.ForeignKey(
+        Unidad, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidencias'
+    )
+    tecnico = models.ForeignKey(
+        Tecnico,
+        verbose_name='Técnico asignado',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incidencias',
+    )
     notas_internas = models.TextField('Notas internas (solo administrador)', blank=True)
     creada = models.DateTimeField('Creada', auto_now_add=True)
     actualizada = models.DateTimeField('Actualizada', auto_now=True)
@@ -100,3 +185,60 @@ class Comentario(models.Model):
 
     def __str__(self):
         return f'Comentario de {self.autor} en "{self.incidencia}"'
+
+
+class EventoInmutableError(Exception):
+    pass
+
+
+class EventoQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise EventoInmutableError('Los eventos son inmutables: no se pueden modificar.')
+
+    def delete(self):
+        raise EventoInmutableError('Los eventos son inmutables: no se pueden borrar.')
+
+
+class EventoIncidencia(models.Model):
+    """Historial de solo anexado: cada cambio importante deja una fila que nunca se edita."""
+
+    CREADA = 'creada'
+    ESTADO_CAMBIADO = 'estado_cambiado'
+    TECNICO_ASIGNADO = 'tecnico_asignado'
+    REABIERTA = 'reabierta'
+    TIPOS = [
+        (CREADA, 'Creada'),
+        (ESTADO_CAMBIADO, 'Cambio de estado'),
+        (TECNICO_ASIGNADO, 'Técnico asignado'),
+        (REABIERTA, 'Reabierta'),
+    ]
+
+    incidencia = models.ForeignKey(Incidencia, on_delete=models.CASCADE, related_name='eventos')
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    estado_anterior = models.CharField(max_length=15, blank=True)
+    estado_nuevo = models.CharField(max_length=15, blank=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_incidencia',
+    )
+    detalle = models.TextField(blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    objects = EventoQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['creado', 'id']
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} - {self.incidencia_id}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise EventoInmutableError('Los eventos son inmutables: no se pueden modificar.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise EventoInmutableError('Los eventos son inmutables: no se pueden borrar.')

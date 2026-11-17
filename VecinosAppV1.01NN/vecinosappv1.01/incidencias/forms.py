@@ -4,7 +4,8 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import UploadedFile
 
-from .models import Comentario, Incidencia, Perfil
+from . import dominio
+from .models import Comentario, Edificio, Incidencia, Perfil, Tecnico
 
 User = get_user_model()
 
@@ -35,7 +36,7 @@ class RegistroForm(BootstrapMixin, UserCreationForm):
     email = forms.EmailField(label='Correo electrónico', required=True)
     nombre_completo = forms.CharField(label='Nombre completo', max_length=100)
     piso_puerta = forms.CharField(label='Piso / puerta', max_length=20)
-    edificio = forms.CharField(label='Edificio', max_length=100)
+    edificio = forms.ModelChoiceField(queryset=Edificio.objects.all(), label='Edificio')
 
     class Meta(UserCreationForm.Meta):
         model = User
@@ -87,13 +88,44 @@ class IncidenciaForm(BootstrapMixin, forms.ModelForm):
         return foto
 
 
-class IncidenciaGestionForm(BootstrapMixin, forms.ModelForm):
-    """Formulario del administrador: estado, prioridad, técnico y notas internas."""
+class IncidenciaGestionForm(BootstrapMixin, forms.Form):
+    """Estado, prioridad, técnico y notas. Solo ofrece transiciones válidas."""
 
-    class Meta:
-        model = Incidencia
-        fields = ['estado', 'prioridad', 'tecnico', 'notas_internas']
-        widgets = {'notas_internas': forms.Textarea(attrs={'rows': 4})}
+    estado = forms.ChoiceField(label='Estado', choices=[])
+    prioridad = forms.ChoiceField(label='Prioridad', choices=Incidencia.PRIORIDADES)
+    tecnico = forms.ModelChoiceField(
+        label='Técnico asignado',
+        queryset=Tecnico.objects.none(),
+        required=False,
+        empty_label='Sin técnico',
+    )
+    notas_internas = forms.CharField(
+        label='Notas internas (solo administrador)',
+        widget=forms.Textarea(attrs={'rows': 4}),
+        required=False,
+    )
+
+    def __init__(self, *args, incidencia, **kwargs):
+        kwargs['initial'] = {
+            'estado': incidencia.estado,
+            'prioridad': incidencia.prioridad,
+            'tecnico': incidencia.tecnico_id,
+            'notas_internas': incidencia.notas_internas,
+            **kwargs.get('initial', {}),
+        }
+        super().__init__(*args, **kwargs)
+        self.incidencia = incidencia
+        etiquetas = dict(Incidencia.ESTADOS)
+        self.fields['estado'].choices = [
+            (incidencia.estado, f'{etiquetas[incidencia.estado]} (actual)')
+        ] + [
+            (valor, etiqueta)
+            for valor, etiqueta in Incidencia.ESTADOS
+            if dominio.puede_pasar(incidencia.estado, valor)
+        ]
+        self.fields['tecnico'].queryset = Tecnico.objects.filter(
+            edificios=incidencia.edificio_id, activo=True
+        )
 
 
 class ComentarioForm(BootstrapMixin, forms.ModelForm):

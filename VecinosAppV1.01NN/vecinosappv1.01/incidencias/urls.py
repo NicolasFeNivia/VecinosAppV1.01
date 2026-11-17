@@ -25,6 +25,7 @@ urlpatterns = [
     path('incidencias/<int:pk>/', views.IncidenciaDetailView.as_view(), name='incidencia_detalle'),
     path('incidencias/<int:pk>/editar/', views.IncidenciaUpdateView.as_view(), name='incidencia_editar'),
     path('incidencias/<int:pk>/gestionar/', views.IncidenciaGestionView.as_view(), name='incidencia_gestionar'),
+    path('incidencias/<int:pk>/reabrir/', views.IncidenciaReabrirView.as_view(), name='incidencia_reabrir'),
     path('incidencias/<int:pk>/eliminar/', views.IncidenciaDeleteView.as_view(), name='incidencia_eliminar'),
     path('incidencias/<int:pk>/comentar/', views.ComentarioCreateView.as_view(), name='incidencia_comentar'),
 

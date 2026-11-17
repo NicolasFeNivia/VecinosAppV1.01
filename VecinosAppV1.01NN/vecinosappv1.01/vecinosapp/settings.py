@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from django.contrib.messages import constants as messages
@@ -53,12 +54,26 @@ TEMPLATES = [
 WSGI_APPLICATION = 'vecinosapp.wsgi.application'
 
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Por defecto usa SQLite (sirve para M1). Desde M2 se necesita PostgreSQL:
+# define la variable de entorno DB_ENGINE=postgres (ver docker-compose.yml).
+if os.environ.get('DB_ENGINE', 'sqlite') == 'postgres':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'vecinosapp'),
+            'USER': os.environ.get('DB_USER', 'vecinos'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', 'vecinos'),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 AUTH_PASSWORD_VALIDATORS = [
