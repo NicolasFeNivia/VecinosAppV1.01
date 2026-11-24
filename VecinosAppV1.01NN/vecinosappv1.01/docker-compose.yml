@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vecinosapp
+      POSTGRES_USER: vecinos
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-vecinos_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vecinos -d vecinosapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  web:
+    build: .
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    environment:
+      DB_ENGINE: postgres
+      DB_NAME: vecinosapp
+      DB_USER: vecinos
+      DB_PASSWORD: ${DB_PASSWORD:-vecinos_dev}
+      DB_HOST: db
+      DB_PORT: 5432
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-only-change-me}
+      DJANGO_DEBUG: "1"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+volumes:
+  pgdata:

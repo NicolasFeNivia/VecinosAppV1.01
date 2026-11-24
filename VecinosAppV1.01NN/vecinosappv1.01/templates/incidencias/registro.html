@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block titulo %}Registro{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header">Crear cuenta de residente</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {% include "includes/campos_form.html" %}
+                    <button type="submit" class="btn btn-success">Registrarme</button>
+                    <a class="btn btn-link" href="{% url 'login' %}">Ya tengo cuenta</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

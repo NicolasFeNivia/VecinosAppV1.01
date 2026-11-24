@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block titulo %}{% if object %}Editar incidencia{% else %}Nueva incidencia{% endif %}{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header">{% if object %}Editar incidencia{% else %}Reportar una incidencia{% endif %}</div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% include "includes/campos_form.html" %}
+                    <button type="submit" class="btn btn-success">Guardar</button>
+                    <a class="btn btn-secondary" href="{% url 'incidencia_lista' %}">Cancelar</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
