@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block titulo %}Dashboard{% endblock %}
+
+{% block contenido %}
+<h2 class="mb-4">Dashboard del administrador</h2>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm"><div class="card-body">
+            <div class="display-6">{{ total }}</div>
+            <div class="text-muted">Total</div>
+        </div></div>
+    </div>
+    {% for etiqueta, cantidad in resumen_estados %}
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm"><div class="card-body">
+            <div class="display-6">{{ cantidad }}</div>
+            <div class="text-muted">{{ etiqueta }}</div>
+        </div></div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm"><div class="card-header">Incidencias por categoría</div>
+            <div class="card-body"><canvas id="graficoCategoria"></canvas></div></div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm"><div class="card-header">Incidencias por estado</div>
+            <div class="card-body"><canvas id="graficoEstado"></canvas></div></div>
+    </div>
+</div>
+
+{{ datos_categoria|json_script:"datos-categoria" }}
+{{ datos_estado|json_script:"datos-estado" }}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const dc = JSON.parse(document.getElementById('datos-categoria').textContent);
+    const de = JSON.parse(document.getElementById('datos-estado').textContent);
+
+    new Chart(document.getElementById('graficoCategoria'), {
+        type: 'bar',
+        data: { labels: dc.labels, datasets: [{ label: 'Incidencias', data: dc.values }] },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+
+    new Chart(document.getElementById('graficoEstado'), {
+        type: 'doughnut',
+        data: { labels: de.labels, datasets: [{ data: de.values }] }
+    });
+</script>
+{% endblock %}

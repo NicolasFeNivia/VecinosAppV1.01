@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block titulo %}Mi perfil{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header">Mi perfil ({{ user.username }})</div>
+            <div class="card-body">
+                {% if perfil.unidad %}
+                <p class="mb-3">
+                    <span class="text-muted small d-block">Mi vivienda</span>
+                    <strong>{{ perfil.vivienda }}</strong>
+                    <span class="form-text d-block">Si necesitas cambiarla, pídeselo al administrador.</span>
+                </p>
+                {% elif perfil.edificio %}
+                <p class="mb-3">
+                    <span class="text-muted small d-block">Mi edificio</span>
+                    <strong>{{ perfil.edificio }}</strong>
+                </p>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    {% include "includes/campos_form.html" %}
+                    <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

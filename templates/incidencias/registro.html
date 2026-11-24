@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block titulo %}Registro{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-md-9 col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header">Crear cuenta de residente</div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    {% for campo in form.campos_datos %}
+                    {% include "includes/campo.html" %}
+                    {% endfor %}
+
+                    <p class="form-label mb-1">¿Dónde vives?</p>
+                    {% if not form.datos_vivienda %}
+                    <div class="alert alert-warning">
+                        Todavía no hay edificios con apartamentos cargados. Pídele al administrador que los registre.
+                    </div>
+                    {% endif %}
+                    <div class="row g-2 mb-1">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small text-muted" for="{{ form.edificio.id_for_label }}">1. Edificio</label>
+                            {{ form.edificio }}
+                        </div>
+                        <div class="col-12 col-md-4" id="col-piso" hidden>
+                            <label class="form-label small text-muted" for="{{ form.piso.id_for_label }}">2. Piso</label>
+                            {{ form.piso }}
+                        </div>
+                        <div class="col-12 col-md-4" id="col-unidad" hidden>
+                            <label class="form-label small text-muted" for="{{ form.unidad.id_for_label }}">3. Apartamento</label>
+                            {{ form.unidad }}
+                        </div>
+                    </div>
+                    {% for campo in form.campos_vivienda %}
+                    {% for error in campo.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                    {% endfor %}
+                    <div class="form-text mb-3">Debes elegir un solo edificio, un solo piso y un solo apartamento.</div>
+
+                    {% for campo in form.campos_clave %}
+                    {% include "includes/campo.html" %}
+                    {% endfor %}
+
+                    <button type="submit" class="btn btn-success">Registrarme</button>
+                    <a class="btn btn-link" href="{% url 'login' %}">Ya tengo cuenta</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ form.datos_vivienda|json_script:"datos-vivienda" }}
+{{ form.seleccion_inicial|json_script:"seleccion-vivienda" }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const datos = JSON.parse(document.getElementById('datos-vivienda').textContent);
+    const inicial = JSON.parse(document.getElementById('seleccion-vivienda').textContent);
+
+    const selEdificio = document.getElementById('id_edificio');
+    const selPiso = document.getElementById('id_piso');
+    const selUnidad = document.getElementById('id_unidad');
+    const colPiso = document.getElementById('col-piso');
+    const colUnidad = document.getElementById('col-unidad');
+
+    function llenar(select, textoVacio, opciones) {
+        select.replaceChildren();
+        const vacio = document.createElement('option');
+        vacio.value = '';
+        vacio.textContent = textoVacio;
+        select.appendChild(vacio);
+        opciones.forEach(function (o) {
+            const op = document.createElement('option');
+            op.value = String(o.valor);
+            op.textContent = o.texto;
+            select.appendChild(op);
+        });
+    }
+
+    function mostrar(columna, select, visible) {
+        columna.hidden = !visible;
+        select.required = visible;
+        if (!visible) { select.value = ''; }
+    }
+
+    function edificioElegido() {
+        return datos.find(function (e) { return String(e.id) === selEdificio.value; });
+    }
+
+    function pisoElegido() {
+        const e = edificioElegido();
+        if (!e) { return undefined; }
+        return e.pisos.find(function (p) { return String(p.numero) === selPiso.value; });
+    }
+
+    function cargarPisos() {
+        const e = edificioElegido();
+        llenar(selPiso, 'Selecciona tu piso', e ? e.pisos.map(function (p) {
+            return { valor: p.numero, texto: p.etiqueta };
+        }) : []);
+        mostrar(colPiso, selPiso, !!e);
+        cargarUnidades();
+    }
+
+    function cargarUnidades() {
+        const p = pisoElegido();
+        llenar(selUnidad, 'Selecciona tu apartamento', p ? p.unidades.map(function (u) {
+            return { valor: u.id, texto: 'Apartamento ' + u.nombre };
+        }) : []);
+        mostrar(colUnidad, selUnidad, !!p);
+    }
+
+    selEdificio.addEventListener('change', cargarPisos);
+    selPiso.addEventListener('change', cargarUnidades);
+
+    // Estado inicial (también al volver con errores de validación)
+    selEdificio.value = inicial.edificio;
+    cargarPisos();
+    if (inicial.piso !== '') {
+        selPiso.value = inicial.piso;
+        cargarUnidades();
+        selUnidad.value = inicial.unidad;
+    }
+})();
+</script>
+{% endblock %}

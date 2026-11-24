@@ -1,0 +1,278 @@
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
+from django.urls import reverse
+
+
+class Organizacion(models.Model):
+    nombre = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        verbose_name = 'organización'
+        verbose_name_plural = 'organizaciones'
+
+    def __str__(self):
+        return self.nombre
+
+
+class Edificio(models.Model):
+    organizacion = models.ForeignKey(
+        Organizacion, on_delete=models.PROTECT, related_name='edificios'
+    )
+    nombre = models.CharField(max_length=100)
+    direccion = models.CharField(max_length=200, blank=True)
+    administradores = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='edificios_administrados'
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organizacion', 'nombre'], name='edificio_unico_por_organizacion'
+            )
+        ]
+
+    def __str__(self):
+        return self.nombre
+
+
+class Unidad(models.Model):
+    """Un apartamento: pertenece a un edificio y está en un piso."""
+
+    edificio = models.ForeignKey(Edificio, on_delete=models.CASCADE, related_name='unidades')
+    piso = models.PositiveSmallIntegerField('Piso', default=1)
+    identificador = models.CharField('Apartamento', max_length=20)
+
+    class Meta:
+        verbose_name = 'unidad'
+        verbose_name_plural = 'unidades'
+        ordering = ['edificio', 'piso', 'identificador']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['edificio', 'identificador'], name='unidad_unica_por_edificio'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.edificio} - {self.identificador}'
+
+
+class Tecnico(models.Model):
+    nombre = models.CharField(max_length=100)
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tecnico',
+    )
+    edificios = models.ManyToManyField(Edificio, blank=True, related_name='tecnicos')
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.nombre
+
+
+class Perfil(models.Model):
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='perfil'
+    )
+    nombre_completo = models.CharField('Nombre completo', max_length=100, blank=True)
+    edificio = models.ForeignKey(
+        Edificio,
+        verbose_name='Edificio',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='residentes',
+    )
+    unidad = models.ForeignKey(
+        Unidad,
+        verbose_name='Apartamento',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='residentes',
+    )
+
+    class Meta:
+        verbose_name_plural = 'perfiles'
+
+    def __str__(self):
+        return f'Perfil de {self.usuario.username}'
+
+    @property
+    def vivienda(self):
+        """Texto como 'Torre A · Piso 1 · Apto 101' (vacío si no tiene)."""
+        if self.unidad_id:
+            u = self.unidad
+            return f'{u.edificio} · Piso {u.piso} · Apto {u.identificador}'
+        return str(self.edificio) if self.edificio_id else ''
+
+    def clean(self):
+        super().clean()
+        if self.unidad_id and self.edificio_id and self.unidad.edificio_id != self.edificio_id:
+            raise ValidationError(
+                {'unidad': 'El apartamento elegido no pertenece al edificio del perfil.'}
+            )
+
+    def save(self, *args, **kwargs):
+        # Un solo edificio, un solo piso, un solo apartamento: el edificio siempre
+        # es el del apartamento elegido.
+        if self.unidad_id:
+            self.edificio_id = self.unidad.edificio_id
+        super().save(*args, **kwargs)
+
+
+class Incidencia(models.Model):
+    CATEGORIAS = [
+        ('agua', 'Agua'),
+        ('electricidad', 'Electricidad'),
+        ('limpieza', 'Limpieza'),
+        ('seguridad', 'Seguridad'),
+        ('otros', 'Otros'),
+    ]
+    PRIORIDADES = [
+        ('baja', 'Baja'),
+        ('media', 'Media'),
+        ('alta', 'Alta'),
+    ]
+    ESTADOS = [
+        ('pendiente', 'Pendiente'),
+        ('en_proceso', 'En Proceso'),
+        ('resuelta', 'Resuelta'),
+        ('cerrada', 'Cerrada'),
+    ]
+
+    titulo = models.CharField('Título', max_length=150)
+    descripcion = models.TextField('Descripción')
+    categoria = models.CharField('Categoría', max_length=20, choices=CATEGORIAS, default='otros')
+    prioridad = models.CharField('Prioridad', max_length=10, choices=PRIORIDADES, default='media')
+    estado = models.CharField('Estado', max_length=15, choices=ESTADOS, default='pendiente')
+    foto = models.ImageField('Foto', upload_to='incidencias/', blank=True, null=True)
+    residente = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='incidencias'
+    )
+    edificio = models.ForeignKey(
+        Edificio, on_delete=models.PROTECT, related_name='incidencias'
+    )
+    unidad = models.ForeignKey(
+        Unidad, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidencias'
+    )
+    tecnico = models.ForeignKey(
+        Tecnico,
+        verbose_name='Técnico asignado',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incidencias',
+    )
+    notas_internas = models.TextField('Notas internas (solo administrador)', blank=True)
+    creada = models.DateTimeField('Creada', auto_now_add=True)
+    actualizada = models.DateTimeField('Actualizada', auto_now=True)
+
+    class Meta:
+        ordering = ['-creada']
+        verbose_name = 'incidencia'
+        verbose_name_plural = 'incidencias'
+
+    def __str__(self):
+        return self.titulo
+
+    def get_absolute_url(self):
+        return reverse('incidencia_detalle', args=[self.pk])
+
+    @property
+    def estado_badge(self):
+        return {
+            'pendiente': 'warning text-dark',
+            'en_proceso': 'primary',
+            'resuelta': 'success',
+            'cerrada': 'secondary',
+        }.get(self.estado, 'secondary')
+
+    @property
+    def prioridad_badge(self):
+        return {'baja': 'info text-dark', 'media': 'warning text-dark', 'alta': 'danger'}.get(
+            self.prioridad, 'secondary'
+        )
+
+    def delete(self, *args, **kwargs):
+        # Borra también el archivo de la foto del disco
+        if self.foto:
+            self.foto.delete(save=False)
+        super().delete(*args, **kwargs)
+
+
+class Comentario(models.Model):
+    incidencia = models.ForeignKey(
+        Incidencia, on_delete=models.CASCADE, related_name='comentarios'
+    )
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comentarios'
+    )
+    texto = models.TextField('Comentario')
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['creado']
+
+    def __str__(self):
+        return f'Comentario de {self.autor} en "{self.incidencia}"'
+
+
+class EventoInmutableError(Exception):
+    pass
+
+
+class EventoQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise EventoInmutableError('Los eventos son inmutables: no se pueden modificar.')
+
+    def delete(self):
+        raise EventoInmutableError('Los eventos son inmutables: no se pueden borrar.')
+
+
+class EventoIncidencia(models.Model):
+    """Historial de solo anexado: cada cambio importante deja una fila que nunca se edita."""
+
+    CREADA = 'creada'
+    ESTADO_CAMBIADO = 'estado_cambiado'
+    TECNICO_ASIGNADO = 'tecnico_asignado'
+    REABIERTA = 'reabierta'
+    TIPOS = [
+        (CREADA, 'Creada'),
+        (ESTADO_CAMBIADO, 'Cambio de estado'),
+        (TECNICO_ASIGNADO, 'Técnico asignado'),
+        (REABIERTA, 'Reabierta'),
+    ]
+
+    incidencia = models.ForeignKey(Incidencia, on_delete=models.CASCADE, related_name='eventos')
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    estado_anterior = models.CharField(max_length=15, blank=True)
+    estado_nuevo = models.CharField(max_length=15, blank=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_incidencia',
+    )
+    detalle = models.TextField(blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    objects = EventoQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['creado', 'id']
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} - {self.incidencia_id}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise EventoInmutableError('Los eventos son inmutables: no se pueden modificar.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise EventoInmutableError('Los eventos son inmutables: no se pueden borrar.')

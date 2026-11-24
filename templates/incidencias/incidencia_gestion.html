@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block titulo %}Gestionar incidencia{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header">Gestionar: {{ object.titulo }}</div>
+            <div class="card-body">
+                <p class="text-muted small">Flujo: Pendiente → En Proceso → Resuelta → Cerrada</p>
+                <form method="post">
+                    {% csrf_token %}
+                    {% include "includes/campos_form.html" %}
+                    <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                    <a class="btn btn-secondary" href="{% url 'incidencia_detalle' object.pk %}">Cancelar</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
