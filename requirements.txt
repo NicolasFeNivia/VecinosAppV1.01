@@ -1,3 +1,11 @@
 Django>=5.0
 Pillow
 psycopg[binary]
+# M4 - API
+djangorestframework
+djangorestframework-simplejwt
+drf-spectacular
+# M5 - Eventos y asincronía
+celery[redis]
+# Pruebas de contrato (opcional, ver README_M4_M5.md)
+schemathesis

@@ -7,3 +7,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('incidencias.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# M4: API versionada en /api/v1/
+urlpatterns += [path('api/', include('api.urls'))]

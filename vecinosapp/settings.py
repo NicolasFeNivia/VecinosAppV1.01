@@ -107,3 +107,65 @@ MESSAGE_TAGS = {messages.ERROR: 'danger'}
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'vecinosapp@ejemplo.com'
+
+
+# =====================================================================
+# M4 (API) y M5 (eventos y asincronía): bloque añadido, no modifica lo anterior
+# =====================================================================
+from datetime import timedelta  # noqa: E402
+
+INSTALLED_APPS += [
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'drf_spectacular',
+    'eventos',
+    'api',
+]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'api.excepciones.manejador',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'api.throttles.ThrottleUsuario',
+        'api.throttles.ThrottleEdificio',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'usuario': '120/min',    # por usuario (o por IP si es anónimo)
+        'edificio': '600/min',   # compartido por todos los usuarios de un edificio
+    },
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,        # cada refresh entrega un refresh nuevo...
+    'BLACKLIST_AFTER_ROTATION': True,     # ...y el anterior deja de servir
+    'UPDATE_LAST_LOGIN': False,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'VecinosApp API',
+    'DESCRIPTION': (
+        'API versionada de incidencias. Autenticación JWT (`/api/v1/auth/token/`). '
+        'Los POST aceptan la cabecera `Idempotency-Key`; los GET devuelven `ETag`. '
+        'Los webhooks se firman con HMAC-SHA256 (cabecera `X-Vecinos-Signature`).'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
+# Celery + Redis (M5). CELERY_EAGER=1 ejecuta las tareas en el mismo proceso (sin Redis).
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_EAGER', '0') == '1'
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
