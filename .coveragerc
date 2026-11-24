@@ -1,0 +1,13 @@
+[run]
+branch = True
+source = incidencias, api, eventos, tiempo_real
+omit =
+    */migrations/*
+    */tests.py
+    */tests_*.py
+    */test_*.py
+    incidencias/management/*
+    */asgi.py
+
+[report]
+show_missing = True

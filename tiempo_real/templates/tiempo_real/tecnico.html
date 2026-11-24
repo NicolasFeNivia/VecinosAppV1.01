@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}Técnico{% endblock %}
+{% block contenido %}
+<link rel="manifest" href="{% url 'manifest' %}">
+<h2 class="mb-3">Mis incidencias <span class="badge bg-secondary" id="red"></span></h2>
+<ul class="list-group mb-3" id="lista">
+  {% for i in incidencias %}
+  <li class="list-group-item d-flex justify-content-between" id="fila-{{ i.pk }}">
+    <a href="{% url 'en_vivo_detalle' i.pk %}">{{ i.titulo }}</a>
+    <span class="badge bg-{{ i.estado_badge }}" data-estado>{{ i.get_estado_display }}</span>
+  </li>
+  {% empty %}<li class="list-group-item text-muted">No tienes incidencias asignadas.</li>{% endfor %}
+</ul>
+<button class="btn btn-outline-primary btn-sm" id="permiso">Activar notificaciones</button>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'tiempo_real/ws.js' %}"></script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+  const red = () => document.getElementById('red').textContent = navigator.onLine ? '' : 'sin conexión';
+  addEventListener('online', red); addEventListener('offline', red); red();
+  document.getElementById('permiso').onclick = () => Notification.requestPermission();
+  document.querySelectorAll('[id^=fila-]').forEach(li => {
+    const id = li.id.replace('fila-', '');
+    conectarWS(`/ws/incidencias/${id}/`, (m) => {
+      const b = li.querySelector('[data-estado]');
+      b.textContent = m.estado_display; b.className = 'badge bg-' + m.badge;
+      avisar('Incidencia actualizada', m.titulo + ': ' + m.estado_display);
+    });
+  });
+</script>
+{% endblock %}

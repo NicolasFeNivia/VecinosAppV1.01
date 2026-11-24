@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}Incidencias en vivo{% endblock %}
+{% block contenido %}
+<h2 class="mb-3">Incidencias en vivo <span class="badge bg-success" id="estado-ws">conectando…</span></h2>
+<table class="table table-sm bg-white shadow-sm">
+  <thead><tr><th>#</th><th>Título</th><th>Estado</th></tr></thead>
+  <tbody>
+  {% for i in incidencias %}
+    <tr id="fila-{{ i.pk }}">
+      <td>{{ i.pk }}</td>
+      <td><a href="{% url 'en_vivo_detalle' i.pk %}">{{ i.titulo }}</a></td>
+      <td><span class="badge bg-{{ i.estado_badge }}" data-estado>{{ i.get_estado_display }}</span></td>
+    </tr>
+  {% empty %}<tr><td colspan="3" class="text-muted">Sin incidencias.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{{ edificios_ws|json_script:"edificios-ws" }}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'tiempo_real/ws.js' %}"></script>
+<script>
+  const edificios = JSON.parse(document.getElementById('edificios-ws').textContent);
+  edificios.forEach(id => conectarWS(`/ws/edificios/${id}/`, (m) => {
+    const fila = document.getElementById('fila-' + m.incidencia_id);
+    if (!fila) { location.reload(); return; }   // incidencia nueva
+    const b = fila.querySelector('[data-estado]');
+    b.textContent = m.estado_display;
+    b.className = 'badge bg-' + m.badge;
+  }));
+  document.getElementById('estado-ws').textContent = edificios.length ? 'en vivo' : 'sin canal';
+</script>
+{% endblock %}

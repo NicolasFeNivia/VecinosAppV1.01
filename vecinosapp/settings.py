@@ -169,3 +169,23 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+
+# =====================================================================
+# M6 (tiempo real y panel): bloque añadido, no modifica lo anterior
+# =====================================================================
+INSTALLED_APPS.insert(0, 'daphne')   # primero: hace que runserver sirva ASGI (WebSockets)
+INSTALLED_APPS += ['channels', 'tiempo_real']
+
+ASGI_APPLICATION = 'tiempo_real.asgi.application'
+
+# Desarrollo: capa en memoria (un solo proceso). Producción: define CHANNEL_REDIS_URL.
+if os.environ.get('CHANNEL_REDIS_URL'):
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [os.environ['CHANNEL_REDIS_URL']]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}

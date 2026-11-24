@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}{{ incidencia.titulo }}{% endblock %}
+{% block contenido %}
+<h2>{{ incidencia.titulo }}</h2>
+<p>Estado: <span class="badge bg-{{ incidencia.estado_badge }}" id="estado">{{ incidencia.get_estado_display }}</span></p>
+<p>{{ incidencia.descripcion }}</p>
+<ul class="list-group" id="registro"></ul>
+<a class="btn btn-link" href="{% url 'incidencia_detalle' incidencia.pk %}">Ver detalle completo</a>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'tiempo_real/ws.js' %}"></script>
+<script>
+  conectarWS('/ws/incidencias/{{ incidencia.pk }}/', (m) => {
+    const b = document.getElementById('estado');
+    b.textContent = m.estado_display; b.className = 'badge bg-' + m.badge;
+    const li = document.createElement('li');
+    li.className = 'list-group-item';
+    li.textContent = new Date(m.creado).toLocaleTimeString() + ' · ' + m.evento + ' · ' + m.estado_display;
+    document.getElementById('registro').prepend(li);
+  });
+</script>
+{% endblock %}

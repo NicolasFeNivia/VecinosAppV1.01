@@ -10,3 +10,6 @@ urlpatterns = [
 
 # M4: API versionada en /api/v1/
 urlpatterns += [path('api/', include('api.urls'))]
+
+# M6: páginas en vivo, panel de indicadores y app del técnico (PWA)
+urlpatterns += [path('', include('tiempo_real.urls'))]

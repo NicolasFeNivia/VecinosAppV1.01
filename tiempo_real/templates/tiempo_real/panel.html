@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}Panel de indicadores{% endblock %}
+{% block contenido %}
+<h2 class="mb-3">Panel de indicadores</h2>
+<form id="filtros" class="row g-2 mb-4">
+  <div class="col-md-3"><select name="edificio" class="form-select">
+    <option value="">Todos los edificios</option>
+    {% for e in edificios %}<option value="{{ e.pk }}">{{ e.nombre }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><select name="tecnico" class="form-select">
+    <option value="">Todos los técnicos</option>
+    {% for t in tecnicos %}<option value="{{ t.pk }}">{{ t.nombre }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><input type="date" name="desde" class="form-control"></div>
+  <div class="col-md-2"><input type="date" name="hasta" class="form-control"></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100">Aplicar</button></div>
+</form>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card text-center shadow-sm"><div class="card-body">
+    <div class="display-6" id="k-tmr">–</div><div class="text-muted">Tiempo medio de resolución (h)</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card text-center shadow-sm"><div class="card-body">
+    <div class="display-6" id="k-sla">–</div><div class="text-muted">Cumplimiento de SLA</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card text-center shadow-sm"><div class="card-body">
+    <div class="display-6" id="k-abiertos">–</div><div class="text-muted">Casos abiertos</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card text-center shadow-sm"><div class="card-body">
+    <div class="display-6" id="k-reap">–</div><div class="text-muted">Tasa de reapertura</div></div></div></div>
+</div>
+<div class="card shadow-sm"><div class="card-header">Casos abiertos acumulados por día</div>
+  <div class="card-body"><canvas id="grafico"></canvas></div></div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  let grafico;
+  const fmt = (v, s='') => v === null ? 'n/d' : v + s;
+  async function cargar() {
+    const q = new URLSearchParams(new FormData(document.getElementById('filtros')));
+    const d = await (await fetch('{% url "panel_datos" %}?' + q)).json();
+    document.getElementById('k-tmr').textContent = fmt(d.tiempo_medio_resolucion_horas);
+    document.getElementById('k-sla').textContent = fmt(d.cumplimiento_sla_pct, '%');
+    document.getElementById('k-abiertos').textContent = d.abiertos_acumulados;
+    document.getElementById('k-reap').textContent = fmt(d.tasa_reapertura_pct, '%');
+    const datos = { labels: d.serie_abiertos.map(p => p.dia),
+                    datasets: [{ label: 'Abiertos', data: d.serie_abiertos.map(p => p.abiertos), tension: .2 }] };
+    if (grafico) { grafico.data = datos; grafico.update(); }
+    else grafico = new Chart(document.getElementById('grafico'), { type: 'line', data: datos });
+  }
+  document.getElementById('filtros').addEventListener('submit', e => { e.preventDefault(); cargar(); });
+  cargar();
+</script>
+{% endblock %}

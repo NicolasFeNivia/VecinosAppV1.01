@@ -9,3 +9,12 @@ drf-spectacular
 celery[redis]
 # Pruebas de contrato (opcional, ver README_M4_M5.md)
 schemathesis
+# M6 - Tiempo real
+channels
+daphne
+channels-redis
+# M7 - Calidad
+hypothesis
+coverage
+locust
+mutmut
